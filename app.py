@@ -692,8 +692,11 @@ st.markdown(
             margin-bottom: 24px !important;
         }}
 
-        /* Bordered containers (Sourcing cards) render as white cards */
-        [data-testid="stVerticalBlockBorderWrapper"] {{
+        /* Cards: only wrappers that contain our hidden .card-marker.
+           (Streamlit wraps every column in this testid, so we must scope it.) */
+        [data-testid="stVerticalBlockBorderWrapper"]:has(
+            > div > [data-testid="stVerticalBlock"]
+            > [data-testid="element-container"] .card-marker) {{
             background-color: {CARD_BG} !important;
             border: 1px solid {BORDER} !important;
             border-radius: 18px !important;
@@ -701,6 +704,27 @@ st.markdown(
             padding: 22px 26px !important;
             margin-bottom: 20px !important;
         }}
+        .card-marker {{ display: none; }}
+
+        /* Circular delete button — scoped to the column holding .del-marker */
+        [data-testid="column"]:has(.del-marker) button {{
+            border-radius: 50% !important;
+            width: 46px !important;
+            height: 46px !important;
+            min-height: 46px !important;
+            padding: 0 !important;
+            background: {INPUT_BG} !important;
+            border: 1px solid {BORDER} !important;
+            box-shadow: none !important;
+        }}
+        [data-testid="column"]:has(.del-marker) button p {{
+            font-size: 20px !important;
+        }}
+        [data-testid="column"]:has(.del-marker) button:hover {{
+            background: #F7E0E0 !important;
+            border-color: #C94B4B !important;
+        }}
+        .del-marker {{ display: none; }}
 
         .card-heading {{
             font-size: 22px;
@@ -853,6 +877,19 @@ def set_page(name: str) -> None:
     st.session_state.active_page = name
 
 
+def card():
+    """A white 'card' container.
+
+    Streamlit wraps EVERY column in a stVerticalBlockBorderWrapper, so we can't
+    style that testid globally (it would box every table cell). Instead we drop
+    a hidden marker inside the container and the CSS targets only wrappers that
+    contain it.
+    """
+    c = st.container(border=True)
+    c.markdown('<span class="card-marker"></span>', unsafe_allow_html=True)
+    return c
+
+
 # ----------------------------------------------------------------------------
 # Wishlist page
 # ----------------------------------------------------------------------------
@@ -903,7 +940,7 @@ def render_wishlist() -> None:
     df = load_wishlist()
     count = len(df)
 
-    with st.container(border=True):
+    with card():
         st.markdown(
             f'<div class="card-heading">Wishlist — {count} '
             f'item{"s" if count != 1 else ""}</div>',
@@ -972,9 +1009,9 @@ def render_wishlist() -> None:
                 row[5].markdown(f'<div class="cmp-c">{status_badge(r["Status"])}</div>',
                                 unsafe_allow_html=True)
                 with row[6]:
-                    if st.button("🗑", key=f"wl_del_{r['#']}",
-                                 help="Delete this component",
-                                 use_container_width=True):
+                    st.markdown('<span class="del-marker"></span>',
+                                unsafe_allow_html=True)
+                    if st.button("🗑", key=f"wl_del_{r['#']}"):
                         st.session_state.wl_pending_delete = r["#"]
                         st.rerun()
 
@@ -1059,7 +1096,7 @@ def render_sourcing() -> None:
 
     # ---- Component Queue ----
     with qcol:
-        with st.container(border=True):
+        with card():
             st.markdown(
                 f'<div class="queue-title">Component Queue</div>'
                 f'<div class="queue-sub">{pending} pending · {sourced} sourced</div>',
@@ -1083,7 +1120,7 @@ def render_sourcing() -> None:
     # ---- Sourcing content ----
     with ccol:
         # Component card: info | Skip | Confirm  (single level of columns)
-        with st.container(border=True):
+        with card():
             ci, cs, cc = st.columns([6.4, 1.2, 1.7])
             with ci:
                 st.markdown(
@@ -1132,7 +1169,7 @@ def render_sourcing() -> None:
         left, right = st.columns(2, gap="large")
 
         with left:
-            with st.container(border=True):
+            with card():
                 st.markdown(
                     '<div class="src-card-title">Trusted Supplier</div>'
                     '<div class="src-card-sub">Pre-approved local vendors</div>',
@@ -1160,7 +1197,7 @@ def render_sourcing() -> None:
                         st.rerun()
 
         with right:
-            with st.container(border=True):
+            with card():
                 st.markdown(
                     '<div class="src-card-title">URL Search</div>'
                     '<div class="src-card-sub">Manually record details from any '
@@ -1191,7 +1228,7 @@ def render_sourcing() -> None:
                         st.rerun()
 
         # Supplier options table
-        with st.container(border=True):
+        with card():
             st.markdown(
                 f'<div class="opt-head">'
                 f'<span class="card-heading" style="margin:0;">Supplier Options for '
