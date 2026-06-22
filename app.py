@@ -172,10 +172,26 @@ def write_workbook(wishlist_df: pd.DataFrame, options_df: pd.DataFrame) -> None:
 
 
 # ---- Writes ----------------------------------------------------------------
+def _next_id(records_or_df) -> int:
+    """Next component id = max(existing) + 1, so ids never collide after deletes."""
+    nums = []
+    if isinstance(records_or_df, pd.DataFrame):
+        values = records_or_df["#"] if "#" in records_or_df.columns else []
+    else:
+        values = [r.get("#") for r in records_or_df]
+    for v in values:
+        try:
+            nums.append(int(float(v)))
+        except (ValueError, TypeError):
+            pass
+    return (max(nums) + 1) if nums else 1
+
+
 def add_component(component, model, specs, qty) -> None:
     if _use_gsheets():
         wl_ws, _ = _get_worksheets()
-        next_num = len(wl_ws.get_all_records()) + 1
+        records = wl_ws.get_all_records()
+        next_num = _next_id(records)
         wl_ws.append_row([
             next_num, component, model, specs, int(qty),
             datetime.now().strftime("%Y-%m-%d"), "Pending", "",
@@ -185,7 +201,7 @@ def add_component(component, model, specs, qty) -> None:
     wl = load_wishlist()
     opts = load_options()
     new_row = {
-        "#": len(wl) + 1,
+        "#": _next_id(wl),
         "Component": component,
         "Model": model,
         "Specifications": specs,
@@ -280,6 +296,29 @@ def confirm_source(component_id) -> str:
     wl.loc[wmask, "Selected Supplier"] = supplier
     write_workbook(wl, opts)
     return supplier
+
+
+def delete_component(component_id) -> None:
+    """Remove a component AND every supplier option recorded for it."""
+    if _use_gsheets():
+        wl_ws, opt_ws = _get_worksheets()
+        # Delete supplier-option rows (bottom-up so row numbers stay valid)
+        opt_records = opt_ws.get_all_records()
+        for i in range(len(opt_records) - 1, -1, -1):
+            if str(opt_records[i].get("Component ID")) == str(component_id):
+                opt_ws.delete_rows(i + 2)
+        # Delete the wishlist row
+        wl_records = wl_ws.get_all_records()
+        for i in range(len(wl_records) - 1, -1, -1):
+            if str(wl_records[i].get("#")) == str(component_id):
+                wl_ws.delete_rows(i + 2)
+        _refresh()
+        return
+    wl = load_wishlist()
+    opts = load_options()
+    wl = wl[wl["#"].astype(str) != str(component_id)].reset_index(drop=True)
+    opts = opts[opts["Component ID"].astype(str) != str(component_id)].reset_index(drop=True)
+    write_workbook(wl, opts)
 
 
 def route_for(supplier, cart) -> str:
@@ -856,43 +895,88 @@ def render_wishlist() -> None:
                               specs.strip(), qty)
                 st.success(f"“{component.strip()}” added to the wishlist.")
 
+    # show any delete confirmation message from the previous run
+    if st.session_state.get("wl_msg"):
+        st.success(st.session_state.pop("wl_msg"))
+
     # ---- Wishlist table -------------------------------------------------
     df = load_wishlist()
     count = len(df)
-    rows_html = ""
-    if count == 0:
-        rows_html = (
-            '<tr><td colspan="6"><div class="wl-empty">No components yet — '
-            'add your first one above.</div></td></tr>'
-        )
-    else:
-        for _, r in df.iterrows():
-            rows_html += (
-                "<tr>"
-                f'<td class="wl-comp">{clean(r["Component"])}</td>'
-                f'<td class="wl-muted">{clean(r["Model"])}</td>'
-                f'<td>{clean(r["Specifications"])}</td>'
-                f'<td>{clean(r["Quantity"])}</td>'
-                f'<td class="wl-muted">{clean(r["Date Added"])}</td>'
-                f'<td>{status_badge(r["Status"])}</td>'
-                "</tr>"
-            )
 
-    st.markdown(
-        f"""
-        <div class="card">
-            <div class="card-heading">Wishlist — {count} item{'s' if count != 1 else ''}</div>
-            <table class="wl-table">
-                <thead><tr>
-                    <th>Component</th><th>Model</th><th>Specification</th>
-                    <th>Qty</th><th>Date Added</th><th>Status</th>
-                </tr></thead>
-                <tbody>{rows_html}</tbody>
-            </table>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    with st.container(border=True):
+        st.markdown(
+            f'<div class="card-heading">Wishlist — {count} '
+            f'item{"s" if count != 1 else ""}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Pending-delete confirmation banner
+        pending = st.session_state.get("wl_pending_delete")
+        if pending is not None:
+            match = df[df["#"].astype(str) == str(pending)]
+            if match.empty:
+                st.session_state.pop("wl_pending_delete", None)
+            else:
+                pname = clean(match.iloc[0]["Component"])
+                st.markdown(
+                    f'<div class="route-hint" style="border-color:#C94B4B;'
+                    f'background:#F7E0E0;color:#C94B4B;">Delete '
+                    f'<b>{pname}</b> ({cmp_id(pending)}) and all of its sourcing '
+                    f'options? This cannot be undone.</div>',
+                    unsafe_allow_html=True,
+                )
+                bc1, bc2, _ = st.columns([1.2, 1, 4])
+                with bc1:
+                    if st.button("Yes, delete", key="wl_confirm_del",
+                                 type="primary", use_container_width=True):
+                        delete_component(pending)
+                        st.session_state.pop("wl_pending_delete", None)
+                        st.session_state.wl_msg = f"“{pname}” removed from the wishlist."
+                        st.rerun()
+                with bc2:
+                    if st.button("Cancel", key="wl_cancel_del",
+                                 use_container_width=True):
+                        st.session_state.pop("wl_pending_delete", None)
+                        st.rerun()
+
+        if count == 0:
+            st.markdown(
+                '<div class="wl-empty">No components yet — add your first one '
+                'above.</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            widths = [2.2, 1.3, 2.4, 0.7, 1.4, 1.3, 0.7]
+            heads = ["COMPONENT", "MODEL", "SPECIFICATION", "QTY",
+                     "DATE ADDED", "STATUS", ""]
+            hc = st.columns(widths)
+            for col, h in zip(hc, heads):
+                col.markdown(f'<div class="cmp-h">{h}</div>',
+                             unsafe_allow_html=True)
+
+            for _, r in df.iterrows():
+                row = st.columns(widths)
+                row[0].markdown(
+                    f'<div class="cmp-c cmp-strong">{clean(r["Component"])}</div>',
+                    unsafe_allow_html=True)
+                row[1].markdown(
+                    f'<div class="cmp-c cmp-muted">{clean(r["Model"])}</div>',
+                    unsafe_allow_html=True)
+                row[2].markdown(f'<div class="cmp-c">{clean(r["Specifications"])}</div>',
+                                unsafe_allow_html=True)
+                row[3].markdown(f'<div class="cmp-c">{clean(r["Quantity"])}</div>',
+                                unsafe_allow_html=True)
+                row[4].markdown(
+                    f'<div class="cmp-c cmp-muted">{clean(r["Date Added"])}</div>',
+                    unsafe_allow_html=True)
+                row[5].markdown(f'<div class="cmp-c">{status_badge(r["Status"])}</div>',
+                                unsafe_allow_html=True)
+                with row[6]:
+                    if st.button("🗑", key=f"wl_del_{r['#']}",
+                                 help="Delete this component",
+                                 use_container_width=True):
+                        st.session_state.wl_pending_delete = r["#"]
+                        st.rerun()
 
     # ---- Download -------------------------------------------------------
     if EXCEL_FILE.exists():
