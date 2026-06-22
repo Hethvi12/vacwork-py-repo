@@ -58,7 +58,23 @@ TRUSTED_SUPPLIERS = ["RS Components", "Communica", "Mantech", "Mintech", "Other"
 
 
 # ---- Backend selection -----------------------------------------------------
+def _secrets_file_exists() -> bool:
+    """True if a secrets.toml exists in either location Streamlit reads.
+
+    Checked first so we never touch st.secrets when there's no file — otherwise
+    Streamlit shows a 'No secrets files found' error in the app. On Streamlit
+    Cloud, secrets configured in the dashboard ARE written to one of these.
+    """
+    for p in (Path.home() / ".streamlit" / "secrets.toml",
+              Path(__file__).parent / ".streamlit" / "secrets.toml"):
+        if p.exists():
+            return True
+    return False
+
+
 def _use_gsheets() -> bool:
+    if not _secrets_file_exists():
+        return False
     try:
         return "gcp_service_account" in st.secrets
     except Exception:
@@ -706,22 +722,24 @@ st.markdown(
         }}
         .card-marker {{ display: none; }}
 
-        /* Circular delete button — scoped to the column holding .del-marker */
+        /* Red "Delete" button — scoped to the column holding .del-marker */
         [data-testid="column"]:has(.del-marker) button {{
-            border-radius: 50% !important;
-            width: 46px !important;
-            height: 46px !important;
-            min-height: 46px !important;
-            padding: 0 !important;
-            background: {INPUT_BG} !important;
-            border: 1px solid {BORDER} !important;
+            background: #F7E0E0 !important;
+            border: 1px solid #F0C9C9 !important;
+            border-radius: 10px !important;
             box-shadow: none !important;
+            min-height: 38px !important;
+            padding: 4px 8px !important;
+            white-space: nowrap !important;
         }}
         [data-testid="column"]:has(.del-marker) button p {{
-            font-size: 20px !important;
+            color: #C94B4B !important;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            white-space: nowrap !important;
         }}
         [data-testid="column"]:has(.del-marker) button:hover {{
-            background: #F7E0E0 !important;
+            background: #F2C9C9 !important;
             border-color: #C94B4B !important;
         }}
         .del-marker {{ display: none; }}
@@ -923,7 +941,7 @@ def render_wishlist() -> None:
             qty = st.number_input("Quantity *", min_value=1, max_value=100000,
                                   value=1, step=1)
 
-        submitted = st.form_submit_button("➕  Add Component")
+        submitted = st.form_submit_button("+  Add Component")
         if submitted:
             if not component.strip():
                 st.warning("Please enter a component name.")
@@ -983,9 +1001,9 @@ def render_wishlist() -> None:
                 unsafe_allow_html=True,
             )
         else:
-            widths = [2.2, 1.3, 2.4, 0.7, 1.4, 1.3, 0.7]
+            widths = [2.1, 1.2, 2.2, 0.7, 1.4, 1.2, 1.0]
             heads = ["COMPONENT", "MODEL", "SPECIFICATION", "QTY",
-                     "DATE ADDED", "STATUS", ""]
+                     "DATE ADDED", "STATUS", "ACTION"]
             hc = st.columns(widths)
             for col, h in zip(hc, heads):
                 col.markdown(f'<div class="cmp-h">{h}</div>',
@@ -1011,7 +1029,8 @@ def render_wishlist() -> None:
                 with row[6]:
                     st.markdown('<span class="del-marker"></span>',
                                 unsafe_allow_html=True)
-                    if st.button("🗑", key=f"wl_del_{r['#']}"):
+                    if st.button("Delete", key=f"wl_del_{r['#']}",
+                                 use_container_width=True):
                         st.session_state.wl_pending_delete = r["#"]
                         st.rerun()
 
@@ -1187,7 +1206,7 @@ def render_sourcing() -> None:
                                         disabled=not t_on, key="t_price")
                 t_cart = st.toggle("Shopping Cart Available", value=True,
                                    disabled=not t_on, key="t_cart")
-                if st.button("➕  Add to comparison", key="t_add",
+                if st.button("+  Add to comparison", key="t_add",
                              disabled=not t_on, use_container_width=True):
                     if not clean(t_stock) and not clean(t_price):
                         st.warning("Enter at least the stock or unit price.")
@@ -1218,7 +1237,7 @@ def render_sourcing() -> None:
                                       disabled=not u_on, key="u_eta")
                 u_cart = st.toggle("Shopping Cart Available", value=False,
                                    disabled=not u_on, key="u_cart")
-                if st.button("➕  Add to comparison", key="u_add",
+                if st.button("+  Add to comparison", key="u_add",
                              disabled=not u_on, use_container_width=True):
                     if not clean(u_vendor):
                         st.warning("Enter a vendor name.")
