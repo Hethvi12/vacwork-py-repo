@@ -112,12 +112,25 @@ def _refresh():
         pass
 
 
+def _as_text(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce every column to object dtype with NaN -> "".
+
+    Newer pandas (on Streamlit Cloud) refuses to assign a string into a column
+    it inferred as numeric/empty. Keeping everything as text avoids that and
+    also gives clean display (no NaN).
+    """
+    df = df.astype(object)
+    return df.where(pd.notna(df), "")
+
+
 def _frame(records, columns) -> pd.DataFrame:
     df = pd.DataFrame(records)
     for col in columns:
         if col not in df.columns:
             df[col] = ""
-    return df[columns] if not df.empty else pd.DataFrame(columns=columns)
+    if df.empty:
+        return pd.DataFrame(columns=columns)
+    return _as_text(df[columns])
 
 
 # ---- Loads -----------------------------------------------------------------
@@ -133,7 +146,7 @@ def load_wishlist() -> pd.DataFrame:
         for col in WL_COLUMNS:
             if col not in df.columns:
                 df[col] = ""
-        return df[WL_COLUMNS]
+        return _as_text(df[WL_COLUMNS])
     return pd.DataFrame(columns=WL_COLUMNS)
 
 
@@ -147,7 +160,7 @@ def load_options() -> pd.DataFrame:
             for col in OPT_COLUMNS:
                 if col not in df.columns:
                     df[col] = ""
-            return df[OPT_COLUMNS]
+            return _as_text(df[OPT_COLUMNS])
     return pd.DataFrame(columns=OPT_COLUMNS)
 
 
