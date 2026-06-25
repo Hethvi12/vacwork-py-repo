@@ -713,9 +713,11 @@ st.markdown(
             margin-bottom: 24px !important;
         }}
 
-        /* Cards: target our OWN stable class from st.container(key="appcard_*").
-           No :has(), no Streamlit data-testid — works on every version/browser. */
-        [class*="st-key-appcard"] {{
+        /* Cards: primary path = our OWN stable class from st.container(key=...).
+           Fallback path (older Streamlit) = innermost bordered wrapper holding
+           a .card-marker. Both are listed so styling holds on any version. */
+        [class*="st-key-appcard"],
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker):not(:has([data-testid="stVerticalBlockBorderWrapper"] .card-marker)) {{
             background-color: {CARD_BG} !important;
             border: 1px solid {BORDER} !important;
             border-radius: 18px !important;
@@ -723,10 +725,13 @@ st.markdown(
             padding: 22px 26px !important;
             margin-bottom: 20px !important;
         }}
+        .card-marker {{ display: none; }}
 
-        /* Red "Delete" button — target our OWN stable class from the keyed
-           container st.container(key="delcell_*"). No :has(), no testids. */
-        [class*="st-key-delcell"] button {{
+        /* Red "Delete" button — stable class (newer) OR .del-marker column
+           (older). Both selectors listed so it works on any Streamlit version. */
+        [class*="st-key-delcell"] button,
+        [data-testid="column"]:has(.del-marker) button,
+        [data-testid="stColumn"]:has(.del-marker) button {{
             background: #F7E0E0 !important;
             border: 1px solid #F0C9C9 !important;
             border-radius: 10px !important;
@@ -735,16 +740,21 @@ st.markdown(
             padding: 4px 8px !important;
             white-space: nowrap !important;
         }}
-        [class*="st-key-delcell"] button p {{
+        [class*="st-key-delcell"] button p,
+        [data-testid="column"]:has(.del-marker) button p,
+        [data-testid="stColumn"]:has(.del-marker) button p {{
             color: #C94B4B !important;
             font-weight: 600 !important;
             font-size: 14px !important;
             white-space: nowrap !important;
         }}
-        [class*="st-key-delcell"] button:hover {{
+        [class*="st-key-delcell"] button:hover,
+        [data-testid="column"]:has(.del-marker) button:hover,
+        [data-testid="stColumn"]:has(.del-marker) button:hover {{
             background: #F2C9C9 !important;
             border-color: #C94B4B !important;
         }}
+        .del-marker {{ display: none; }}
 
         .card-heading {{
             font-size: 22px;
@@ -901,16 +911,23 @@ _CARD_SEQ = 0
 
 
 def card():
-    """A white 'card' container with a STABLE, app-owned CSS class.
+    """A white 'card' container, styled two crash-safe ways.
 
-    st.container(key=...) adds a `st-key-<key>` class to the container element.
-    We target `[class*="st-key-appcard"]` in CSS — a class we own, so it never
-    depends on Streamlit's internal data-testid names or :has() support, and it
-    works identically across Streamlit versions / on Streamlit Cloud.
+    Newer Streamlit (>=1.39): st.container(key=...) stamps a stable, app-owned
+    class `st-key-appcard_*` that we target directly — no :has(), no testids.
+
+    Older Streamlit (no `key` arg): we fall back to a hidden .card-marker and a
+    :has() selector. Either way the same white-card styling applies, and we
+    never crash on `key` not being supported.
     """
     global _CARD_SEQ
     _CARD_SEQ += 1
-    return st.container(border=True, key=f"appcard_{_CARD_SEQ}")
+    try:
+        c = st.container(border=True, key=f"appcard_{_CARD_SEQ}")
+    except TypeError:
+        c = st.container(border=True)
+    c.markdown('<span class="card-marker"></span>', unsafe_allow_html=True)
+    return c
 
 
 # ----------------------------------------------------------------------------
@@ -1032,7 +1049,13 @@ def render_wishlist() -> None:
                 row[5].markdown(f'<div class="cmp-c">{status_badge(r["Status"])}</div>',
                                 unsafe_allow_html=True)
                 with row[6]:
-                    with st.container(key=f"delcell_{r['#']}"):
+                    try:
+                        cont = st.container(key=f"delcell_{r['#']}")
+                    except TypeError:
+                        cont = st.container()
+                    with cont:
+                        st.markdown('<span class="del-marker"></span>',
+                                    unsafe_allow_html=True)
                         if st.button("Delete", key=f"wl_del_{r['#']}",
                                      use_container_width=True):
                             st.session_state.wl_pending_delete = r["#"]
