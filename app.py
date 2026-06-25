@@ -708,14 +708,12 @@ st.markdown(
             margin-bottom: 24px !important;
         }}
 
-        /* Cards: only wrappers that contain our hidden .card-marker.
-           (Streamlit wraps every column in this testid, so we must scope it.)
-           Selector list covers DOM testid renames across Streamlit versions:
-           element-container -> stElementContainer (newer). */
-        [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"] > [data-testid="element-container"] .card-marker),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .card-marker),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="element-container"] .card-marker),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .card-marker) {{
+        /* Cards: style the INNERMOST bordered wrapper that holds a .card-marker
+           — i.e. one that has the marker but does NOT contain another bordered
+           wrapper that also has the marker. This only relies on the stable
+           stVerticalBlockBorderWrapper testid + our own class, so it survives
+           Streamlit DOM testid renames (column->stColumn, etc.). */
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker):not(:has([data-testid="stVerticalBlockBorderWrapper"] .card-marker)) {{
             background-color: {CARD_BG} !important;
             border: 1px solid {BORDER} !important;
             border-radius: 18px !important;
