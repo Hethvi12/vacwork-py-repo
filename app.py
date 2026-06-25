@@ -35,6 +35,11 @@ INPUT_BG = "#EAF1FA"          # --input-background
 GOLD_BG = "#F7EFD7"
 GOLD_TEXT = "#9A7B2E"
 
+# Bump this whenever code changes, so the deployed build is identifiable at a
+# glance (shown in the sidebar). If the cloud shows an older value than this,
+# it has NOT redeployed the latest commit yet.
+APP_VERSION = "build 2026-06-25 #8 (white-cards)"
+
 # ----------------------------------------------------------------------------
 # Data layer — two tables: Wishlist + SupplierOptions
 #
@@ -708,12 +713,9 @@ st.markdown(
             margin-bottom: 24px !important;
         }}
 
-        /* Cards: style the INNERMOST bordered wrapper that holds a .card-marker
-           — i.e. one that has the marker but does NOT contain another bordered
-           wrapper that also has the marker. This only relies on the stable
-           stVerticalBlockBorderWrapper testid + our own class, so it survives
-           Streamlit DOM testid renames (column->stColumn, etc.). */
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker):not(:has([data-testid="stVerticalBlockBorderWrapper"] .card-marker)) {{
+        /* Cards: target our OWN stable class from st.container(key="appcard_*").
+           No :has(), no Streamlit data-testid — works on every version/browser. */
+        [class*="st-key-appcard"] {{
             background-color: {CARD_BG} !important;
             border: 1px solid {BORDER} !important;
             border-radius: 18px !important;
@@ -721,12 +723,10 @@ st.markdown(
             padding: 22px 26px !important;
             margin-bottom: 20px !important;
         }}
-        .card-marker {{ display: none; }}
 
-        /* Red "Delete" button — scoped to the column holding .del-marker.
-           Covers column -> stColumn testid rename across Streamlit versions. */
-        [data-testid="column"]:has(.del-marker) button,
-        [data-testid="stColumn"]:has(.del-marker) button {{
+        /* Red "Delete" button — target our OWN stable class from the keyed
+           container st.container(key="delcell_*"). No :has(), no testids. */
+        [class*="st-key-delcell"] button {{
             background: #F7E0E0 !important;
             border: 1px solid #F0C9C9 !important;
             border-radius: 10px !important;
@@ -735,19 +735,16 @@ st.markdown(
             padding: 4px 8px !important;
             white-space: nowrap !important;
         }}
-        [data-testid="column"]:has(.del-marker) button p,
-        [data-testid="stColumn"]:has(.del-marker) button p {{
+        [class*="st-key-delcell"] button p {{
             color: #C94B4B !important;
             font-weight: 600 !important;
             font-size: 14px !important;
             white-space: nowrap !important;
         }}
-        [data-testid="column"]:has(.del-marker) button:hover,
-        [data-testid="stColumn"]:has(.del-marker) button:hover {{
+        [class*="st-key-delcell"] button:hover {{
             background: #F2C9C9 !important;
             border-color: #C94B4B !important;
         }}
-        .del-marker {{ display: none; }}
 
         .card-heading {{
             font-size: 22px;
@@ -900,17 +897,20 @@ def set_page(name: str) -> None:
     st.session_state.active_page = name
 
 
-def card():
-    """A white 'card' container.
+_CARD_SEQ = 0
 
-    Streamlit wraps EVERY column in a stVerticalBlockBorderWrapper, so we can't
-    style that testid globally (it would box every table cell). Instead we drop
-    a hidden marker inside the container and the CSS targets only wrappers that
-    contain it.
+
+def card():
+    """A white 'card' container with a STABLE, app-owned CSS class.
+
+    st.container(key=...) adds a `st-key-<key>` class to the container element.
+    We target `[class*="st-key-appcard"]` in CSS — a class we own, so it never
+    depends on Streamlit's internal data-testid names or :has() support, and it
+    works identically across Streamlit versions / on Streamlit Cloud.
     """
-    c = st.container(border=True)
-    c.markdown('<span class="card-marker"></span>', unsafe_allow_html=True)
-    return c
+    global _CARD_SEQ
+    _CARD_SEQ += 1
+    return st.container(border=True, key=f"appcard_{_CARD_SEQ}")
 
 
 # ----------------------------------------------------------------------------
@@ -1032,12 +1032,11 @@ def render_wishlist() -> None:
                 row[5].markdown(f'<div class="cmp-c">{status_badge(r["Status"])}</div>',
                                 unsafe_allow_html=True)
                 with row[6]:
-                    st.markdown('<span class="del-marker"></span>',
-                                unsafe_allow_html=True)
-                    if st.button("Delete", key=f"wl_del_{r['#']}",
-                                 use_container_width=True):
-                        st.session_state.wl_pending_delete = r["#"]
-                        st.rerun()
+                    with st.container(key=f"delcell_{r['#']}"):
+                        if st.button("Delete", key=f"wl_del_{r['#']}",
+                                     use_container_width=True):
+                            st.session_state.wl_pending_delete = r["#"]
+                            st.rerun()
 
     # ---- Download -------------------------------------------------------
     if EXCEL_FILE.exists():
@@ -1359,6 +1358,11 @@ with st.sidebar:
             </div>
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div style="text-align:center;font-size:11px;color:{MUTED_TEXT};'
+        f'margin-top:10px;">{APP_VERSION}</div>',
         unsafe_allow_html=True,
     )
 
