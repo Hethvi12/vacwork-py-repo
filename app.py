@@ -1393,9 +1393,17 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
+    if _use_gsheets():
+        _store_label, _store_bg, _store_fg = "Shared storage · Google Sheets", MINT, "#3E7A63"
+    else:
+        _store_label, _store_bg, _store_fg = "Temporary storage · local file", GOLD_BG, GOLD_TEXT
     st.markdown(
+        f'<div style="text-align:center;margin-top:12px;">'
+        f'<span style="background:{_store_bg};color:{_store_fg};font-size:11px;'
+        f'font-weight:600;padding:3px 10px;border-radius:999px;">{_store_label}</span>'
+        f'</div>'
         f'<div style="text-align:center;font-size:11px;color:{MUTED_TEXT};'
-        f'margin-top:10px;">{APP_VERSION}</div>',
+        f'margin-top:8px;">{APP_VERSION}</div>',
         unsafe_allow_html=True,
     )
 
