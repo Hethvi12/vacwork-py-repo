@@ -40,7 +40,7 @@ GOLD_TEXT = "#9A7B2E"
 # Bump this whenever code changes, so the deployed build is identifiable at a
 # glance (shown in the sidebar). If the cloud shows an older value than this,
 # it has NOT redeployed the latest commit yet.
-APP_VERSION = "build 2026-06-25 #14 (nav-left-no-icons)"
+APP_VERSION = "build 2026-06-25 #15 (compact-main)"
 
 # ----------------------------------------------------------------------------
 # Data layer — two tables: Wishlist + SupplierOptions
@@ -496,7 +496,7 @@ st.markdown(
             font-family: 'Inter', sans-serif;
             color: {TEXT};
         }}
-        html {{ font-size: 16px; }}
+        html {{ font-size: 14.5px; }}
 
         .stApp {{ background-color: {BACKGROUND}; }}
 
@@ -660,27 +660,27 @@ st.markdown(
         /* -------------------------------------------------------------- */
         .card {{
             background-color: {CARD_BG};
-            border-radius: 18px;
+            border-radius: 16px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06);
             border: 1px solid {BORDER};
-            padding: 30px 34px;
-            margin-bottom: 24px;
+            padding: 20px 24px;
+            margin-bottom: 18px;
         }}
         .page-title {{
-            font-size: 34px;
+            font-size: 26px;
             font-weight: 700;
             color: {TEXT};
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }}
         .page-subtitle {{
-            font-size: 17px;
+            font-size: 14px;
             color: {MUTED_TEXT};
-            margin-bottom: 24px;
+            margin-bottom: 18px;
         }}
         .placeholder {{
-            font-size: 20px;
+            font-size: 15px;
             color: {MUTED_TEXT};
-            line-height: 1.7;
+            line-height: 1.6;
         }}
 
         /* -------------------------------------------------------------- */
@@ -690,11 +690,11 @@ st.markdown(
         .stNumberInput input {{
             background-color: {INPUT_BG} !important;
             border: 1px solid {BORDER} !important;
-            border-radius: 12px !important;
+            border-radius: 10px !important;
             color: {TEXT} !important;
-            font-size: 16px !important;
-            padding: 12px 16px !important;
-            min-height: 48px !important;
+            font-size: 14px !important;
+            padding: 9px 12px !important;
+            min-height: 40px !important;
         }}
         .stTextInput input:focus,
         .stNumberInput input:focus {{
@@ -702,7 +702,7 @@ st.markdown(
             box-shadow: 0 0 0 3px rgba(91,125,177,0.18) !important;
         }}
         .stTextInput label, .stNumberInput label {{
-            font-size: 15px !important;
+            font-size: 13px !important;
             font-weight: 600 !important;
             color: {TEXT} !important;
         }}
@@ -717,14 +717,14 @@ st.markdown(
             background-color: {PRIMARY_BLUE} !important;
             color: #ffffff !important;
             border: none !important;
-            border-radius: 12px !important;
-            padding: 12px 26px !important;
+            border-radius: 10px !important;
+            padding: 9px 20px !important;
             box-shadow: 0 4px 12px rgba(91,125,177,0.30) !important;
         }}
         [data-testid="stFormSubmitButton"] button p,
         .stDownloadButton button p {{
             color: #ffffff !important;
-            font-size: 16px !important;
+            font-size: 14px !important;
             font-weight: 600 !important;
         }}
         [data-testid="stFormSubmitButton"] button:hover,
@@ -736,10 +736,10 @@ st.markdown(
         [data-testid="stForm"] {{
             background-color: {CARD_BG} !important;
             border: 1px solid {BORDER} !important;
-            border-radius: 18px !important;
+            border-radius: 16px !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
-            padding: 30px 34px !important;
-            margin-bottom: 24px !important;
+            padding: 20px 24px !important;
+            margin-bottom: 18px !important;
         }}
 
         /* Cards: primary path = our OWN stable class from st.container(key=...).
@@ -749,10 +749,10 @@ st.markdown(
         [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker):not(:has([data-testid="stVerticalBlockBorderWrapper"] .card-marker)) {{
             background-color: {CARD_BG} !important;
             border: 1px solid {BORDER} !important;
-            border-radius: 18px !important;
+            border-radius: 16px !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
-            padding: 22px 26px !important;
-            margin-bottom: 20px !important;
+            padding: 18px 20px !important;
+            margin-bottom: 16px !important;
         }}
         .card-marker {{ display: none; }}
 
@@ -786,38 +786,38 @@ st.markdown(
         .del-marker {{ display: none; }}
 
         .card-heading {{
-            font-size: 22px;
+            font-size: 18px;
             font-weight: 700;
             color: {TEXT};
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }}
 
         /* Sourcing card headers */
         .src-card-title {{
-            font-size: 20px;
+            font-size: 16px;
             font-weight: 700;
             color: {TEXT};
         }}
         .src-card-sub {{
-            font-size: 14px;
+            font-size: 13px;
             color: {MUTED_TEXT};
             margin-bottom: 6px;
         }}
 
         /* Supplier comparison "table" built from columns */
         .cmp-h {{
-            font-size: 12px;
+            font-size: 11px;
             letter-spacing: 1px;
             text-transform: uppercase;
             color: {MUTED_TEXT};
             font-weight: 600;
-            padding: 6px 4px 12px 4px;
+            padding: 6px 4px 10px 4px;
             border-bottom: 1px solid {BORDER};
         }}
         .cmp-c {{
-            font-size: 16px;
+            font-size: 14px;
             color: {TEXT};
-            padding: 14px 4px;
+            padding: 11px 4px;
             border-bottom: 1px solid {BORDER};
         }}
         .cmp-strong {{ font-weight: 700; }}
@@ -835,8 +835,8 @@ st.markdown(
         .progress-top {{
             display: flex; justify-content: space-between; align-items: baseline;
         }}
-        .progress-label {{ font-size: 15px; font-weight: 700; color: {TEXT}; }}
-        .progress-pct {{ font-size: 15px; font-weight: 700; color: {PRIMARY_BLUE}; }}
+        .progress-label {{ font-size: 13px; font-weight: 700; color: {TEXT}; }}
+        .progress-pct {{ font-size: 13px; font-weight: 700; color: {PRIMARY_BLUE}; }}
         .progress-track {{
             height: 7px; background: {INPUT_BG}; border-radius: 999px;
             margin: 12px 0 8px 0; overflow: hidden;
@@ -847,7 +847,7 @@ st.markdown(
         .progress-sub {{ font-size: 13px; color: {MUTED_TEXT}; }}
 
         /* Component Queue */
-        .queue-title {{ font-size: 19px; font-weight: 700; color: {TEXT}; }}
+        .queue-title {{ font-size: 16px; font-weight: 700; color: {TEXT}; }}
         .queue-sub {{
             font-size: 13px; color: {MUTED_TEXT};
             margin: 2px 0 12px 0; padding-bottom: 12px;
@@ -865,17 +865,17 @@ st.markdown(
         .opt-head {{
             display: flex; justify-content: space-between; align-items: baseline;
         }}
-        .opt-count {{ font-size: 14px; color: {MUTED_TEXT}; }}
+        .opt-count {{ font-size: 13px; color: {MUTED_TEXT}; }}
         .opt-sub {{ font-size: 13px; color: {MUTED_TEXT}; margin: 2px 0 18px 0; }}
 
         /* Routing hint box */
         .route-hint {{
             background: {INPUT_BG};
             border: 1px dashed {BORDER};
-            border-radius: 14px;
-            padding: 16px 20px;
+            border-radius: 12px;
+            padding: 12px 16px;
             text-align: center;
-            font-size: 15px;
+            font-size: 13px;
             color: {MUTED_TEXT};
         }}
         .route-active {{
@@ -909,7 +909,7 @@ st.markdown(
         .wl-comp {{ font-weight: 600; }}
         .wl-muted {{ color: {MUTED_TEXT}; }}
         .wl-empty {{
-            font-size: 17px;
+            font-size: 14px;
             color: {MUTED_TEXT};
             padding: 8px 4px;
         }}
@@ -1200,17 +1200,17 @@ def render_sourcing() -> None:
             with ci:
                 st.markdown(
                     f"""
-                    <div style="display:flex;align-items:center;gap:16px;">
-                        <div style="width:48px;height:48px;border-radius:12px;
+                    <div style="display:flex;align-items:center;gap:14px;">
+                        <div style="width:40px;height:40px;border-radius:10px;
                             background:{INPUT_BG};display:flex;align-items:center;
-                            justify-content:center;font-size:22px;">🔌</div>
+                            justify-content:center;font-size:18px;">🔌</div>
                         <div>
-                            <div style="font-size:21px;font-weight:700;color:{TEXT};">
+                            <div style="font-size:17px;font-weight:700;color:{TEXT};">
                                 {clean(comp["Component"])}
                                 &nbsp;{sourcing_badge(comp["Status"])}
                                 &nbsp;<span class="id-chip">{cmp_id(comp["#"])}</span>
                             </div>
-                            <div style="font-size:14px;color:{MUTED_TEXT};margin-top:6px;">
+                            <div style="font-size:13px;color:{MUTED_TEXT};margin-top:5px;">
                                 <b style="color:{MUTED_TEXT};font-weight:600;">MODEL</b>
                                 &nbsp;{clean(comp["Model"])} &nbsp;&nbsp;|&nbsp;&nbsp;
                                 <b style="color:{MUTED_TEXT};font-weight:600;">SPEC</b>
