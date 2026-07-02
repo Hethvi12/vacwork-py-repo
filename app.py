@@ -40,7 +40,7 @@ GOLD_TEXT = "#9A7B2E"
 # Bump this whenever code changes, so the deployed build is identifiable at a
 # glance (shown in the sidebar). If the cloud shows an older value than this,
 # it has NOT redeployed the latest commit yet.
-APP_VERSION = "build 2026-06-25 #12 (nav-center-email)"
+APP_VERSION = "build 2026-06-25 #13 (email-fits)"
 
 # ----------------------------------------------------------------------------
 # Data layer — two tables: Wishlist + SupplierOptions
@@ -570,10 +570,10 @@ st.markdown(
             background-color: {CARD_BG};
             border-radius: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-            padding: 10px 14px;
+            padding: 10px 12px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             margin: 8px 4px 4px 4px;
             overflow: hidden;            /* keep contents inside the card */
         }}
@@ -582,13 +582,13 @@ st.markdown(
             min-width: 0;                /* allow shrinking below content */
         }}
         .admin-avatar {{
-            width: 38px;
-            height: 38px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             background-color: {PRIMARY_BLUE};
             color: #fff;
             font-weight: 700;
-            font-size: 16px;
+            font-size: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -600,12 +600,11 @@ st.markdown(
             color: {TEXT};
         }}
         .admin-email {{
-            font-size: 13px;
+            font-size: 12px;
             color: {MUTED_TEXT};
             display: block;
-            white-space: nowrap;         /* keep on one line */
-            overflow: hidden;
-            text-overflow: ellipsis;     /* '…' only if it truly can't fit */
+            white-space: normal;         /* wrap (never truncate an email) */
+            word-break: break-word;      /* graceful fallback if font is wide */
         }}
 
         /* -------------------------------------------------------------- */
