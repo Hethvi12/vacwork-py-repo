@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -38,7 +39,7 @@ GOLD_TEXT = "#9A7B2E"
 # Bump this whenever code changes, so the deployed build is identifiable at a
 # glance (shown in the sidebar). If the cloud shows an older value than this,
 # it has NOT redeployed the latest commit yet.
-APP_VERSION = "build 2026-06-25 #8 (white-cards)"
+APP_VERSION = "build 2026-06-25 #9 (gsheets-json)"
 
 # ----------------------------------------------------------------------------
 # Data layer — two tables: Wishlist + SupplierOptions
@@ -81,9 +82,22 @@ def _use_gsheets() -> bool:
     if not _secrets_file_exists():
         return False
     try:
-        return "gcp_service_account" in st.secrets
+        return ("gcp_service_account_json" in st.secrets
+                or "gcp_service_account" in st.secrets)
     except Exception:
         return False
+
+
+def _service_account_info() -> dict:
+    """Return the service-account credentials from secrets.
+
+    Two accepted formats:
+      * gcp_service_account_json = '''<paste the whole .json file here>'''  (easy)
+      * [gcp_service_account] TOML table with each field  (advanced)
+    """
+    if "gcp_service_account_json" in st.secrets:
+        return json.loads(st.secrets["gcp_service_account_json"])
+    return dict(st.secrets["gcp_service_account"])
 
 
 @st.cache_resource(show_spinner=False)
@@ -97,7 +111,7 @@ def _get_worksheets():
         "https://www.googleapis.com/auth/drive",
     ]
     creds = Credentials.from_service_account_info(
-        dict(st.secrets["gcp_service_account"]), scopes=scopes
+        _service_account_info(), scopes=scopes
     )
     gc = gspread.authorize(creds)
 
