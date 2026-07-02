@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -39,7 +40,7 @@ GOLD_TEXT = "#9A7B2E"
 # Bump this whenever code changes, so the deployed build is identifiable at a
 # glance (shown in the sidebar). If the cloud shows an older value than this,
 # it has NOT redeployed the latest commit yet.
-APP_VERSION = "build 2026-06-25 #9 (gsheets-json)"
+APP_VERSION = "build 2026-06-25 #10 (sheet-url-or-id)"
 
 # ----------------------------------------------------------------------------
 # Data layer — two tables: Wishlist + SupplierOptions
@@ -115,9 +116,12 @@ def _get_worksheets():
     )
     gc = gspread.authorize(creds)
 
-    key = st.secrets.get("spreadsheet_key", "")
-    url = st.secrets.get("spreadsheet_url", "")
-    sh = gc.open_by_key(key) if key else gc.open_by_url(url)
+    # Accept either a bare Sheet ID or a full URL in either secret field.
+    raw = str(st.secrets.get("spreadsheet_key", "")
+              or st.secrets.get("spreadsheet_url", "")).strip()
+    m = re.search(r"/d/([a-zA-Z0-9\-_]+)", raw)
+    key = m.group(1) if m else raw
+    sh = gc.open_by_key(key)
 
     def ws_or_create(title, headers):
         try:
