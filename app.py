@@ -40,7 +40,7 @@ GOLD_TEXT = "#9A7B2E"
 # Bump this whenever code changes, so the deployed build is identifiable at a
 # glance (shown in the sidebar). If the cloud shows an older value than this,
 # it has NOT redeployed the latest commit yet.
-APP_VERSION = "build 2026-06-25 #10 (sheet-url-or-id)"
+APP_VERSION = "build 2026-06-25 #11 (compact-sidebar)"
 
 # ----------------------------------------------------------------------------
 # Data layer — two tables: Wishlist + SupplierOptions
@@ -526,7 +526,7 @@ st.markdown(
             background-color: {LIGHT_BLUE};
         }}
         [data-testid="stSidebarUserContent"] {{
-            padding: 10px 16px 16px 16px !important;
+            padding: 4px 14px 8px 14px !important;
         }}
 
         /* Logo box (white card) */
@@ -534,13 +534,13 @@ st.markdown(
             background-color: {CARD_BG};
             border-radius: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-            padding: 16px;
+            padding: 8px;
             text-align: center;
-            margin: 4px 10px 16px 10px;
+            margin: 0 24px 6px 24px;
         }}
         .logo-img {{
             width: 100%;
-            max-width: 160px;
+            max-width: 100px;
             height: auto;
             display: inline-block;
         }}
@@ -548,12 +548,12 @@ st.markdown(
         /* Caption under logo */
         .sidebar-caption {{
             text-align: center;
-            font-size: 12px;
+            font-size: 11px;
             letter-spacing: 2px;
             color: {PRIMARY_BLUE};
             font-weight: 600;
             text-transform: uppercase;
-            margin: 0 0 14px 0;
+            margin: 0 0 8px 0;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -562,7 +562,7 @@ st.markdown(
         .sidebar-divider {{
             border: none;
             border-top: 1px solid {BORDER};
-            margin: 4px 6px 16px 6px;
+            margin: 2px 6px 8px 6px;
         }}
 
         /* Bottom admin card */
@@ -570,11 +570,11 @@ st.markdown(
             background-color: {CARD_BG};
             border-radius: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-            padding: 14px 16px;
+            padding: 10px 14px;
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin: 34px 6px 6px 6px;
+            gap: 10px;
+            margin: 8px 4px 4px 4px;
             overflow: hidden;            /* keep contents inside the card */
         }}
         .admin-card > div:last-child {{
@@ -582,8 +582,8 @@ st.markdown(
             min-width: 0;                /* allow shrinking below content */
         }}
         .admin-avatar {{
-            width: 44px;
-            height: 44px;
+            width: 38px;
+            height: 38px;
             border-radius: 50%;
             background-color: {PRIMARY_BLUE};
             color: #fff;
@@ -618,15 +618,15 @@ st.markdown(
             background-color: transparent;   /* same as sidebar bg */
             color: {TEXT};
             border: none;
-            border-radius: 14px;
-            padding: 14px 18px;
-            margin-bottom: 2px;
+            border-radius: 12px;
+            padding: 7px 16px;
+            margin-bottom: 0px;
             box-shadow: none;
             transition: all 0.15s ease;
         }}
         /* Make the label text (and emoji icon) larger */
         section[data-testid="stSidebar"] .stButton > button p {{
-            font-size: 19px !important;
+            font-size: 17px !important;
             font-weight: 500 !important;
         }}
         section[data-testid="stSidebar"] .stButton > button:hover {{
@@ -1416,12 +1416,12 @@ with st.sidebar:
     else:
         _store_label, _store_bg, _store_fg = "Temporary storage · local file", GOLD_BG, GOLD_TEXT
     st.markdown(
-        f'<div style="text-align:center;margin-top:12px;">'
+        f'<div style="text-align:center;margin-top:8px;">'
         f'<span style="background:{_store_bg};color:{_store_fg};font-size:11px;'
         f'font-weight:600;padding:3px 10px;border-radius:999px;">{_store_label}</span>'
         f'</div>'
         f'<div style="text-align:center;font-size:11px;color:{MUTED_TEXT};'
-        f'margin-top:8px;">{APP_VERSION}</div>',
+        f'margin-top:4px;">{APP_VERSION}</div>',
         unsafe_allow_html=True,
     )
 
