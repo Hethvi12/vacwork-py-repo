@@ -42,7 +42,7 @@ GOLD_TEXT = "#9A7B2E"
 # Bump this whenever code changes, so the deployed build is identifiable at a
 # glance (shown in the sidebar). If the cloud shows an older value than this,
 # it has NOT redeployed the latest commit yet.
-APP_VERSION = "build 2026-06-25 #16 (procurement-outputs)"
+APP_VERSION = "build 2026-06-25 #17 (outputs-cart-vs-supplier)"
 
 # ----------------------------------------------------------------------------
 # Data layer — two tables: Wishlist + SupplierOptions
@@ -363,22 +363,18 @@ def delete_component(component_id) -> None:
 
 
 def route_for(supplier, cart) -> str:
-    """Decide which procurement bucket a sourced component belongs to.
+    """Decide the procurement bucket for a sourced component.
 
-    Routing is rule-based on user-entered data only — there is no automatic
-    price comparison or 'cheapest supplier' logic (per the lecturer's brief).
+    Only two routes (per the lecturer's brief), based purely on user-entered
+    data — no price comparison:
+      * Shopping Cart Available = Yes -> Shopping Cart Queue
+      * Shopping Cart Available = No  -> Manual Order List (grouped by supplier)
     """
     supplier = clean(supplier)
     cart = clean(cart)
     if not supplier:
-        return "Unresolved Components"
-    if cart.lower() == "yes":
-        return "Shopping Cart Queue"
-    if supplier == "RS Components":
-        return "Veronica Procurement List"
-    if supplier in ("Communica", "Mintech", "Mantech"):
-        return "Tan Procurement List"
-    return "Unresolved Components"
+        return "Unresolved"
+    return "Shopping Cart Queue" if cart.lower() == "yes" else "Manual Order List"
 
 
 def is_true(v) -> bool:
@@ -1416,11 +1412,27 @@ def _table(headers, rows_html):
             f'<thead><tr>{head}</tr></thead><tbody>{rows_html}</tbody></table>')
 
 
+def _price(s) -> float:
+    m = re.search(r"[-+]?\d*\.?\d+", clean(s).replace(",", ""))
+    return float(m.group()) if m else 0.0
+
+
+def _qty(x) -> int:
+    try:
+        return int(float(clean(x)))
+    except (ValueError, TypeError):
+        return 0
+
+
+def _money(v) -> str:
+    return f"R {v:,.2f}"
+
+
 def render_procurement():
     st.markdown(
         '<div class="page-title">Procurement Outputs</div>'
-        '<div class="page-subtitle">Review completeness, then route sourced '
-        'components to carts and order lists.</div>',
+        '<div class="page-subtitle">Components are automatically routed based on '
+        'Shopping Cart availability.</div>',
         unsafe_allow_html=True,
     )
     wl = load_wishlist()
@@ -1468,95 +1480,150 @@ def render_procurement():
             unsafe_allow_html=True,
         )
 
-    # ---- Route sourced components into buckets -------------------------
-    buckets = {"Shopping Cart Queue": [], "Veronica Procurement List": [],
-               "Tan Procurement List": [], "Unresolved Components": []}
+    # ---- Split sourced components: Cart=Yes vs Cart=No -----------------
+    cart_items, manual_items, unresolved = [], [], []
     for _, comp in wl.iterrows():
         chosen = _chosen_option(opts, comp["#"])
-        if clean(comp["Status"]).lower() == "sourced" and chosen is not None:
+        if clean(comp["Status"]).lower() == "sourced" and chosen is not None \
+                and clean(chosen["Supplier"]):
             supplier = clean(chosen["Supplier"])
-            cart = clean(chosen["Shopping Cart Available"])
-            route = route_for(supplier, cart)
+            if clean(chosen["Shopping Cart Available"]).lower() == "yes":
+                cart_items.append((comp, supplier, chosen))
+            else:
+                manual_items.append((comp, supplier, chosen))
         else:
-            supplier, cart, route = "", "", "Unresolved Components"
-        if route not in buckets:
-            route = "Unresolved Components"
-        buckets[route].append((comp, supplier, cart))
+            unresolved.append(comp)
+
+    cart_total = sum(_price(ch["Price"]) * _qty(c["Quantity"])
+                     for (c, s, ch) in cart_items)
+    manual_total = sum(_price(ch["Price"]) * _qty(c["Quantity"])
+                       for (c, s, ch) in manual_items)
+
+    # ---- Summary cards -------------------------------------------------
+    st.markdown(
+        f'''
+        <div style="display:flex;gap:16px;margin-bottom:14px;">
+          <div class="card" style="flex:1;margin-bottom:0;border:1.5px solid #C9D8EE;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="font-size:20px;">🛒</div>
+              <div style="font-size:24px;font-weight:700;color:{TEXT};">{len(cart_items)}</div>
+            </div>
+            <div style="font-size:15px;font-weight:700;color:{TEXT};margin-top:6px;">Shopping Cart Queue</div>
+            <div style="font-size:13px;color:{MUTED_TEXT};">Cart available — send via email</div>
+            <div style="font-size:13px;color:{PRIMARY_BLUE};font-weight:700;margin-top:6px;">{_money(cart_total)} total</div>
+          </div>
+          <div class="card" style="flex:1;margin-bottom:0;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="font-size:20px;">📄</div>
+              <div style="font-size:24px;font-weight:700;color:{TEXT};">{len(manual_items)}</div>
+            </div>
+            <div style="font-size:15px;font-weight:700;color:{TEXT};margin-top:6px;">Manual Order List</div>
+            <div style="font-size:13px;color:{MUTED_TEXT};">No cart — grouped by supplier</div>
+            <div style="font-size:13px;color:{GOLD_TEXT};font-weight:700;margin-top:6px;">{_money(manual_total)} total</div>
+          </div>
+        </div>
+        <div class="card" style="padding:9px 16px;margin-bottom:14px;font-size:13px;color:{MUTED_TEXT};">
+          Routing logic: &nbsp;<b style="color:{PRIMARY_BLUE};">●</b> Cart Available = Yes → Shopping Cart Queue
+          &nbsp;&nbsp;<b style="color:{GOLD_TEXT};">●</b> Cart Available = No → Manual Order List
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
 
     # ---- Shopping Cart Queue -------------------------------------------
-    cart_items = buckets["Shopping Cart Queue"]
+    lect = st.text_input("Lecturer email", placeholder="lecturer@wits.ac.za",
+                         key="lect_email")
+    body = "Shopping cart for procurement:\n\n" + "\n".join(
+        f'- {clean(c["Component"])} ({clean(c["Model"])}) x{_qty(c["Quantity"])} '
+        f'from {sup} @ {_money(_price(ch["Price"]))}'
+        for (c, sup, ch) in cart_items)
+    mailto = (f'mailto:{quote(lect or "")}?subject={quote("Procurement shopping cart")}'
+              f'&body={quote(body)}')
+    email_btn = (
+        f'<a href="{mailto}" target="_blank" style="background:{PRIMARY_BLUE};'
+        f'color:#fff;padding:8px 16px;border-radius:10px;font-size:13px;'
+        f'font-weight:600;text-decoration:none;white-space:nowrap;">'
+        f'✉ Email Cart to Lecturer</a>') if cart_items else ""
     rows = "".join(
         "<tr>"
         f'<td class="cmp-c cmp-strong">{clean(c["Component"])}</td>'
+        f'<td class="cmp-c cmp-muted">{clean(c["Model"])}</td>'
         f'<td class="cmp-c">{sup}</td>'
-        f'<td class="cmp-c">{clean(c["Quantity"])}</td>'
-        f'<td class="cmp-c">{cart_badge("Yes")}</td>'
+        f'<td class="cmp-c">{_qty(c["Quantity"])}</td>'
+        f'<td class="cmp-c cmp-muted">{_money(_price(ch["Price"]))}</td>'
+        f'<td class="cmp-c cmp-price">{_money(_price(ch["Price"]) * _qty(c["Quantity"]))}</td>'
         "</tr>"
-        for (c, sup, cart) in cart_items
-    ) or '<tr><td colspan="4"><div class="wl-empty">Nothing here yet.</div></td></tr>'
+        for (c, sup, ch) in cart_items
+    ) or '<tr><td colspan="6"><div class="wl-empty">Nothing here yet.</div></td></tr>'
     st.markdown(
-        f'<div class="card"><div class="card-heading">🛒 Shopping Cart Queue '
-        f'<span class="opt-count">({len(cart_items)})</span></div>'
-        + _table(["COMPONENT", "SUPPLIER", "QTY", "CART"], rows) + '</div>',
+        f'<div class="card">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+        f'<div class="card-heading" style="margin:0;">🛒 Shopping Cart Queue '
+        f'<span class="opt-count">Components with online cart support</span></div>'
+        f'{email_btn}</div>'
+        + _table(["COMPONENT", "MODEL", "SUPPLIER", "QTY", "UNIT PRICE", "TOTAL"], rows)
+        + '</div>',
         unsafe_allow_html=True,
     )
-    lect = st.text_input("Lecturer email", placeholder="lecturer@wits.ac.za",
-                         key="lect_email")
-    if cart_items:
-        body = "Shopping cart for procurement:\n\n" + "\n".join(
-            f'- {clean(c["Component"])} (qty {clean(c["Quantity"])}) — {sup}'
-            for (c, sup, cart) in cart_items)
-        mailto = (f'mailto:{quote(lect or "")}?subject='
-                  f'{quote("Procurement shopping cart")}&body={quote(body)}')
-        st.markdown(
-            f'<a href="{mailto}" target="_blank" style="display:inline-block;'
-            f'background:{PRIMARY_BLUE};color:#fff;padding:9px 20px;border-radius:10px;'
-            f'font-size:14px;font-weight:600;text-decoration:none;">'
-            f'✉ Email Cart to Lecturer</a>',
-            unsafe_allow_html=True,
-        )
 
-    # ---- Manual Order Lists (per buyer) --------------------------------
-    st.markdown('<div class="card-heading" style="margin-top:6px;">📋 Manual Order '
-                'Lists</div>', unsafe_allow_html=True)
-    for route_name, subtitle in [
-        ("Veronica Procurement List", "RS Components"),
-        ("Tan Procurement List", "Communica · Mintech · Mantech"),
-    ]:
-        items = buckets[route_name]
+    # ---- Manual Order List (grouped by supplier, aggregated) -----------
+    by_sup = {}
+    for (comp, sup, chosen) in manual_items:
+        by_sup.setdefault(sup, []).append((comp, chosen))
+
+    manual_html = ('<div class="card-heading" style="margin:6px 0 12px 0;">'
+                   '📄 Manual Order List</div>')
+    if not by_sup:
+        manual_html += ('<div class="card"><div class="wl-empty">Nothing here yet — '
+                        'no sourced components without an online cart.</div></div>')
+    for sup, items in by_sup.items():
+        # aggregate identical component + specification (sum quantities)
+        agg = {}
+        for comp, chosen in items:
+            k = (clean(comp["Component"]).strip().lower(),
+                 clean(comp["Specifications"]).strip().lower())
+            if k not in agg:
+                agg[k] = {"Component": clean(comp["Component"]),
+                          "Model": clean(comp["Model"]),
+                          "Spec": clean(comp["Specifications"]),
+                          "Qty": 0, "Price": _price(chosen["Price"])}
+            agg[k]["Qty"] += _qty(comp["Quantity"])
+        sub_total = sum(a["Price"] * a["Qty"] for a in agg.values())
+        rows = "".join(
+            "<tr>"
+            f'<td class="cmp-c cmp-strong">{a["Component"]}</td>'
+            f'<td class="cmp-c cmp-muted">{a["Model"]}</td>'
+            f'<td class="cmp-c cmp-muted">{a["Spec"]}</td>'
+            f'<td class="cmp-c">{a["Qty"]}</td>'
+            f'<td class="cmp-c cmp-muted">{_money(a["Price"])}</td>'
+            f'<td class="cmp-c cmp-price">{_money(a["Price"] * a["Qty"])}</td>'
+            "</tr>"
+            for a in agg.values()
+        )
+        manual_html += (
+            f'<div class="card"><div class="card-heading" style="margin-bottom:12px;">'
+            f'{sup} <span class="opt-count">{len(agg)} line'
+            f'{"s" if len(agg) != 1 else ""} · {_money(sub_total)}</span></div>'
+            + _table(["COMPONENT", "MODEL", "SPECIFICATION", "QTY", "UNIT PRICE", "TOTAL"], rows)
+            + '</div>')
+    st.markdown(manual_html, unsafe_allow_html=True)
+
+    # ---- Unresolved (not sourced) --------------------------------------
+    if unresolved:
         rows = "".join(
             "<tr>"
             f'<td class="cmp-c cmp-strong">{clean(c["Component"])}</td>'
-            f'<td class="cmp-c">{sup}</td>'
-            f'<td class="cmp-c">{clean(c["Quantity"])}</td>'
+            f'<td class="cmp-c cmp-muted">{cmp_id(c["#"])}</td>'
+            f'<td class="cmp-c cmp-muted">Not sourced yet</td>'
             "</tr>"
-            for (c, sup, cart) in items
-        ) or '<tr><td colspan="3"><div class="wl-empty">Nothing here yet.</div></td></tr>'
+            for c in unresolved
+        )
         st.markdown(
-            f'<div class="card"><div class="card-heading" style="margin-bottom:2px;">'
-            f'{route_name} <span class="opt-count">({len(items)})</span></div>'
-            f'<div class="opt-sub">{subtitle}</div>'
-            + _table(["COMPONENT", "SUPPLIER", "QTY"], rows) + '</div>',
+            f'<div class="card"><div class="card-heading">❓ Unresolved '
+            f'<span class="opt-count">({len(unresolved)})</span></div>'
+            + _table(["COMPONENT", "ID", "REASON"], rows) + '</div>',
             unsafe_allow_html=True,
         )
-
-    # ---- Unresolved ----------------------------------------------------
-    unresolved = buckets["Unresolved Components"]
-    rows = "".join(
-        "<tr>"
-        f'<td class="cmp-c cmp-strong">{clean(c["Component"])}</td>'
-        f'<td class="cmp-c cmp-muted">{cmp_id(c["#"])}</td>'
-        f'<td class="cmp-c cmp-muted">'
-        f'{"Not sourced" if clean(c["Status"]).lower() != "sourced" else "No route"}</td>'
-        "</tr>"
-        for (c, sup, cart) in unresolved
-    ) or '<tr><td colspan="3"><div class="wl-empty">Nothing here yet.</div></td></tr>'
-    st.markdown(
-        f'<div class="card"><div class="card-heading">❓ Unresolved Components '
-        f'<span class="opt-count">({len(unresolved)})</span></div>'
-        + _table(["COMPONENT", "ID", "REASON"], rows) + '</div>',
-        unsafe_allow_html=True,
-    )
 
     # ---- Export to Excel ----------------------------------------------
     summary = []
@@ -1566,7 +1633,7 @@ def render_procurement():
         cart = clean(chosen["Shopping Cart Available"]) if chosen is not None else ""
         sourced = clean(comp["Status"]).lower() == "sourced"
         route = route_for(sup, cart) if (sourced and chosen is not None) \
-            else "Unresolved Components"
+            else "Unresolved"
         summary.append({
             "ID": cmp_id(comp["#"]),
             "Component": clean(comp["Component"]),
