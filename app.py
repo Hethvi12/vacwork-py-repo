@@ -104,8 +104,8 @@ def _service_account_info() -> dict:
 
 
 @st.cache_resource(show_spinner=False)
-def _get_worksheets():
-    """Open (and lazily create) the two worksheets in the shared spreadsheet."""
+def _open_spreadsheet():
+    """Authorize and open the shared spreadsheet (cached)."""
     import gspread
     from google.oauth2.service_account import Credentials
 
@@ -117,13 +117,19 @@ def _get_worksheets():
         _service_account_info(), scopes=scopes
     )
     gc = gspread.authorize(creds)
-
     # Accept either a bare Sheet ID or a full URL in either secret field.
     raw = str(st.secrets.get("spreadsheet_key", "")
               or st.secrets.get("spreadsheet_url", "")).strip()
     m = re.search(r"/d/([a-zA-Z0-9\-_]+)", raw)
     key = m.group(1) if m else raw
-    sh = gc.open_by_key(key)
+    return gc.open_by_key(key)
+
+
+@st.cache_resource(show_spinner=False)
+def _get_worksheets():
+    """Open (and lazily create) the two worksheets in the shared spreadsheet."""
+    import gspread
+    sh = _open_spreadsheet()
 
     def ws_or_create(title, headers):
         try:
@@ -360,6 +366,74 @@ def delete_component(component_id) -> None:
     wl = wl[wl["#"].astype(str) != str(component_id)].reset_index(drop=True)
     opts = opts[opts["Component ID"].astype(str) != str(component_id)].reset_index(drop=True)
     write_workbook(wl, opts)
+
+
+def update_component(component_id, component, model, specs, qty) -> None:
+    """Edit an existing component's wishlist fields."""
+    if _use_gsheets():
+        wl_ws, _ = _get_worksheets()
+        cols = {name: WL_COLUMNS.index(name) + 1 for name in
+                ("Component", "Model", "Specifications", "Quantity")}
+        for i, rec in enumerate(wl_ws.get_all_records()):
+            if str(rec.get("#")) == str(component_id):
+                r = i + 2
+                wl_ws.update_cell(r, cols["Component"], component)
+                wl_ws.update_cell(r, cols["Model"], model)
+                wl_ws.update_cell(r, cols["Specifications"], specs)
+                wl_ws.update_cell(r, cols["Quantity"], int(qty))
+                break
+        _refresh()
+        return
+    wl = load_wishlist()
+    opts = load_options()
+    mask = wl["#"].astype(str) == str(component_id)
+    wl.loc[mask, "Component"] = component
+    wl.loc[mask, "Model"] = model
+    wl.loc[mask, "Specifications"] = specs
+    wl.loc[mask, "Quantity"] = int(qty)
+    write_workbook(wl, opts)
+
+
+ORDER_HEADERS = ["Component", "Model", "Specification", "Quantity",
+                 "Unit Price", "Line Total"]
+
+
+def save_company_order_sheets(orders_by_company) -> list:
+    """Save each company's aggregated manual order to its own sheet/tab.
+
+    orders_by_company: {company_name: [ {Component, Model, Spec, Qty, Price,
+    Total}, ... ]}. Returns the list of sheet/tab names written.
+    """
+    def _rows(rows):
+        return [ORDER_HEADERS] + [
+            [r["Component"], r["Model"], r["Spec"], r["Qty"],
+             _money(r["Price"]), _money(r["Total"])] for r in rows]
+
+    saved = []
+    if _use_gsheets():
+        sh = _open_spreadsheet()
+        for company, rows in orders_by_company.items():
+            title = ("Order - " + (company or "Unknown"))[:99]
+            try:
+                ws = sh.worksheet(title)
+                ws.clear()
+            except Exception:
+                ws = sh.add_worksheet(title, rows=max(20, len(rows) + 5),
+                                      cols=len(ORDER_HEADERS))
+            ws.update(range_name="A1", values=_rows(rows))
+            saved.append(title)
+        return saved
+
+    # Local Excel fallback → one workbook with a sheet per company
+    out = EXCEL_FILE.parent / "manual_orders.xlsx"
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        for company, rows in orders_by_company.items():
+            data = _rows(rows)
+            pd.DataFrame(data[1:], columns=data[0]).to_excel(
+                writer, sheet_name=("Order - " + (company or "Unknown"))[:31],
+                index=False)
+            saved.append("Order - " + (company or "Unknown"))
+    return saved
 
 
 def route_for(supplier, cart) -> str:
@@ -783,6 +857,27 @@ st.markdown(
         }}
         .del-marker {{ display: none; }}
 
+        /* Blue "Edit" button (Wishlist rows) */
+        [class*="st-key-editcell"] button {{
+            background: {INPUT_BG} !important;
+            border: 1px solid #C9D8EE !important;
+            border-radius: 10px !important;
+            box-shadow: none !important;
+            min-height: 38px !important;
+            padding: 4px 8px !important;
+            white-space: nowrap !important;
+        }}
+        [class*="st-key-editcell"] button p {{
+            color: {PRIMARY_BLUE} !important;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            white-space: nowrap !important;
+        }}
+        [class*="st-key-editcell"] button:hover {{
+            background: {SIDEBAR_ACCENT} !important;
+            border-color: {PRIMARY_BLUE} !important;
+        }}
+
         .card-heading {{
             font-size: 18px;
             font-weight: 700;
@@ -1043,6 +1138,48 @@ def render_wishlist() -> None:
                         st.session_state.pop("wl_pending_delete", None)
                         st.rerun()
 
+        # Inline edit form (to fill in / correct missing data)
+        editing = st.session_state.get("wl_edit_id")
+        if editing is not None:
+            match = df[df["#"].astype(str) == str(editing)]
+            if match.empty:
+                st.session_state.pop("wl_edit_id", None)
+            else:
+                er = match.iloc[0]
+                with st.form("edit_component_form"):
+                    st.markdown(
+                        f'<div class="src-card-title">Edit {clean(er["Component"])} '
+                        f'<span class="opt-count">({cmp_id(editing)})</span></div>',
+                        unsafe_allow_html=True)
+                    e1, e2 = st.columns(2, gap="medium")
+                    with e1:
+                        e_comp = st.text_input("Component Name *",
+                                               value=clean(er["Component"]))
+                        e_spec = st.text_input("Specification",
+                                               value=clean(er["Specifications"]))
+                    with e2:
+                        e_model = st.text_input("Model Number",
+                                                value=clean(er["Model"]))
+                        e_qty = st.number_input(
+                            "Quantity *", min_value=1, max_value=100000,
+                            value=max(1, _qty(er["Quantity"])), step=1)
+                    s1, s2, _ = st.columns([1, 1, 3])
+                    with s1:
+                        if st.form_submit_button("Save changes"):
+                            if not e_comp.strip():
+                                st.warning("Component name can't be empty.")
+                            else:
+                                update_component(editing, e_comp.strip(),
+                                                 e_model.strip(), e_spec.strip(), e_qty)
+                                st.session_state.pop("wl_edit_id", None)
+                                st.session_state.wl_msg = \
+                                    f"“{e_comp.strip()}” updated."
+                                st.rerun()
+                    with s2:
+                        if st.form_submit_button("Cancel"):
+                            st.session_state.pop("wl_edit_id", None)
+                            st.rerun()
+
         if count == 0:
             st.markdown(
                 '<div class="wl-empty">No components yet — add your first one '
@@ -1050,9 +1187,9 @@ def render_wishlist() -> None:
                 unsafe_allow_html=True,
             )
         else:
-            widths = [2.1, 1.2, 2.2, 0.7, 1.4, 1.2, 1.0]
+            widths = [2.0, 1.1, 2.0, 0.6, 1.3, 1.1, 0.95, 0.95]
             heads = ["COMPONENT", "MODEL", "SPECIFICATION", "QTY",
-                     "DATE ADDED", "STATUS", "ACTION"]
+                     "DATE ADDED", "STATUS", "", ""]
             hc = st.columns(widths)
             for col, h in zip(hc, heads):
                 col.markdown(f'<div class="cmp-h">{h}</div>',
@@ -1076,6 +1213,17 @@ def render_wishlist() -> None:
                 row[5].markdown(f'<div class="cmp-c">{status_badge(r["Status"])}</div>',
                                 unsafe_allow_html=True)
                 with row[6]:
+                    try:
+                        econt = st.container(key=f"editcell_{r['#']}")
+                    except TypeError:
+                        econt = st.container()
+                    with econt:
+                        if st.button("Edit", key=f"wl_edit_{r['#']}",
+                                     use_container_width=True):
+                            st.session_state.wl_edit_id = r["#"]
+                            st.session_state.pop("wl_pending_delete", None)
+                            st.rerun()
+                with row[7]:
                     try:
                         cont = st.container(key=f"delcell_{r['#']}")
                     except TypeError:
@@ -1576,6 +1724,7 @@ def render_procurement():
     if not by_sup:
         manual_html += ('<div class="card"><div class="wl-empty">Nothing here yet — '
                         'no sourced components without an online cart.</div></div>')
+    orders_by_company = {}   # {company: [agg rows with Total]} for saving/emailing
     for sup, items in by_sup.items():
         # aggregate identical component + specification (sum quantities)
         agg = {}
@@ -1588,7 +1737,12 @@ def render_procurement():
                           "Spec": clean(comp["Specifications"]),
                           "Qty": 0, "Price": _price(chosen["Price"])}
             agg[k]["Qty"] += _qty(comp["Quantity"])
-        sub_total = sum(a["Price"] * a["Qty"] for a in agg.values())
+        order_rows = []
+        for a in agg.values():
+            a["Total"] = a["Price"] * a["Qty"]
+            order_rows.append(a)
+        orders_by_company[sup] = order_rows
+        sub_total = sum(a["Total"] for a in order_rows)
         rows = "".join(
             "<tr>"
             f'<td class="cmp-c cmp-strong">{a["Component"]}</td>'
@@ -1596,9 +1750,9 @@ def render_procurement():
             f'<td class="cmp-c cmp-muted">{a["Spec"]}</td>'
             f'<td class="cmp-c">{a["Qty"]}</td>'
             f'<td class="cmp-c cmp-muted">{_money(a["Price"])}</td>'
-            f'<td class="cmp-c cmp-price">{_money(a["Price"] * a["Qty"])}</td>'
+            f'<td class="cmp-c cmp-price">{_money(a["Total"])}</td>'
             "</tr>"
-            for a in agg.values()
+            for a in order_rows
         )
         manual_html += (
             f'<div class="card"><div class="card-heading" style="margin-bottom:12px;">'
@@ -1607,6 +1761,39 @@ def render_procurement():
             + _table(["COMPONENT", "MODEL", "SPECIFICATION", "QTY", "UNIT PRICE", "TOTAL"], rows)
             + '</div>')
     st.markdown(manual_html, unsafe_allow_html=True)
+
+    # ---- Save per-company order sheets + email the lecturer ------------
+    if orders_by_company:
+        if st.session_state.get("orders_saved_msg"):
+            st.success(st.session_state.pop("orders_saved_msg"))
+        sc1, sc2, _ = st.columns([1.4, 1.6, 2])
+        with sc1:
+            if st.button("💾  Save order sheets", key="save_orders",
+                         type="primary", use_container_width=True):
+                saved = save_company_order_sheets(orders_by_company)
+                where = "Google Sheet" if _use_gsheets() else "manual_orders.xlsx"
+                st.session_state.orders_saved_msg = (
+                    f"Saved {len(saved)} company order sheet(s) to the {where}: "
+                    + ", ".join(saved))
+                st.rerun()
+        with sc2:
+            lines = []
+            for company, rows in orders_by_company.items():
+                lines.append(f"== {company} ==")
+                for a in rows:
+                    lines.append(f'- {a["Component"]} ({a["Model"]}) x{a["Qty"]} '
+                                 f'@ {_money(a["Price"])} = {_money(a["Total"])}')
+                lines.append("")
+            mbody = "Manual order lists (grouped by supplier):\n\n" + "\n".join(lines)
+            mmailto = (f'mailto:{quote(lect or "")}?subject='
+                       f'{quote("Manual procurement orders")}&body={quote(mbody)}')
+            st.markdown(
+                f'<a href="{mmailto}" target="_blank" style="display:block;'
+                f'text-align:center;background:{PRIMARY_BLUE};color:#fff;padding:8px 16px;'
+                f'border-radius:10px;font-size:14px;font-weight:600;'
+                f'text-decoration:none;">✉ Email Manual Orders to Lecturer</a>',
+                unsafe_allow_html=True,
+            )
 
     # ---- Unresolved (not sourced) --------------------------------------
     if unresolved:
@@ -1701,9 +1888,7 @@ with st.sidebar:
         f'<div style="text-align:center;margin-top:8px;">'
         f'<span style="background:{_store_bg};color:{_store_fg};font-size:11px;'
         f'font-weight:600;padding:3px 10px;border-radius:999px;">{_store_label}</span>'
-        f'</div>'
-        f'<div style="text-align:center;font-size:11px;color:{MUTED_TEXT};'
-        f'margin-top:4px;">{APP_VERSION}</div>',
+        f'</div>',
         unsafe_allow_html=True,
     )
 
