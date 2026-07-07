@@ -436,6 +436,64 @@ def save_company_order_sheets(orders_by_company) -> list:
     return saved
 
 
+def reset_cycle() -> str:
+    """Archive the current batch, then clear the working Wishlist + options.
+
+    Returns the timestamp label used for the archive.
+    """
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    wl = load_wishlist()
+    opts = load_options()
+
+    if _use_gsheets():
+        sh = _open_spreadsheet()
+
+        def _archive(title, headers, df):
+            try:
+                ws = sh.worksheet(title)
+                if ws.row_values(1) != headers:
+                    ws.clear()
+                    ws.append_row(headers)
+            except Exception:
+                ws = sh.add_worksheet(title, rows=200, cols=len(headers))
+                ws.append_row(headers)
+            rows = [[str(x) for x in r] + [ts] for r in df.values.tolist()]
+            if rows:
+                ws.append_rows(rows, value_input_option="USER_ENTERED")
+
+        _archive("Archive Wishlist", WL_COLUMNS + ["Archived"], wl)
+        _archive("Archive Options", OPT_COLUMNS + ["Archived"], opts)
+        wl_ws, opt_ws = _get_worksheets()
+        wl_ws.clear(); wl_ws.append_row(WL_COLUMNS)
+        opt_ws.clear(); opt_ws.append_row(OPT_COLUMNS)
+        _refresh()
+        return ts
+
+    # Local Excel: append this batch to archive.xlsx, then clear the workbook
+    arch = EXCEL_FILE.parent / "archive.xlsx"
+
+    def _read(sheet, cols):
+        if arch.exists():
+            try:
+                return pd.read_excel(arch, sheet_name=sheet)
+            except Exception:
+                pass
+        return pd.DataFrame(columns=cols + ["Archived"])
+
+    awl = _read("Wishlist", WL_COLUMNS)
+    aopt = _read("Options", OPT_COLUMNS)
+    wl2 = wl.copy(); wl2["Archived"] = ts
+    opt2 = opts.copy(); opt2["Archived"] = ts
+    with pd.ExcelWriter(arch, engine="openpyxl") as writer:
+        pd.concat([awl, wl2], ignore_index=True).to_excel(
+            writer, sheet_name="Wishlist", index=False)
+        pd.concat([aopt, opt2], ignore_index=True).to_excel(
+            writer, sheet_name="Options", index=False)
+    write_workbook(pd.DataFrame(columns=WL_COLUMNS),
+                   pd.DataFrame(columns=OPT_COLUMNS))
+    return ts
+
+
 def route_for(supplier, cart) -> str:
     """Decide the procurement bucket for a sourced component.
 
@@ -1311,9 +1369,20 @@ def render_sourcing() -> None:
         st.success(st.session_state.pop("sourcing_msg"))
 
     n = total
-    if st.session_state.get("sourcing_idx", 0) >= n:
-        st.session_state.sourcing_idx = 0
+    show_sourced = bool(st.session_state.get("show_sourced", False))
+
+    def _is_sourced(i):
+        return clean(wl.iloc[i]["Status"]).lower() == "sourced"
+
+    pending_idx = [i for i in range(n) if not _is_sourced(i)]
+    # Queue lists components still to source. Sourced ones drop off (done),
+    # unless the user ticks "Show sourced", or everything is already sourced.
+    visible_idx = list(range(n)) if (show_sourced or not pending_idx) else pending_idx
+
     idx = st.session_state.get("sourcing_idx", 0)
+    if idx not in visible_idx:
+        idx = visible_idx[0] if visible_idx else 0
+        st.session_state.sourcing_idx = idx
 
     # Selection state for the CURRENT component (computed up-front)
     comp = wl.iloc[idx]
@@ -1334,7 +1403,15 @@ def render_sourcing() -> None:
                 f'<div class="queue-sub">{pending} pending · {sourced} sourced</div>',
                 unsafe_allow_html=True,
             )
-            for i, (_, r) in enumerate(wl.iterrows()):
+            st.toggle("Show sourced", key="show_sourced")
+            if not pending_idx:
+                st.markdown(
+                    '<div style="color:#3E7A63;font-weight:600;font-size:13px;'
+                    'margin:6px 0;">✓ All sourced — head to Procurement Outputs.</div>',
+                    unsafe_allow_html=True,
+                )
+            for i in visible_idx:
+                r = wl.iloc[i]
                 status = clean(r["Status"]) or "Pending"
                 is_cur = (i == idx)
                 if status.lower() == "sourced":
@@ -1382,7 +1459,8 @@ def render_sourcing() -> None:
                 )
             with cs:
                 if st.button("Skip", key="src_skip", use_container_width=True):
-                    st.session_state.sourcing_idx = (idx + 1) % n
+                    nxt = [j for j in pending_idx if j != idx]
+                    st.session_state.sourcing_idx = nxt[0] if nxt else idx
                     st.rerun()
             with cc:
                 if st.button("Confirm Source", key="src_confirm", type="primary",
@@ -1394,7 +1472,9 @@ def render_sourcing() -> None:
                         f"“{clean(comp['Component'])}” sourced from {supplier} "
                         f"→ routed to {route}."
                     )
-                    st.session_state.sourcing_idx = min(idx + 1, n - 1)
+                    # jump to the next still-pending component
+                    nxt = [j for j in pending_idx if j != idx]
+                    st.session_state.sourcing_idx = nxt[0] if nxt else idx
                     st.rerun()
 
         # Single sourcing-entry card (choose type; URL always available)
@@ -1835,6 +1915,43 @@ def render_procurement():
                        file_name="procurement_outputs.xlsx",
                        mime="application/vnd.openxmlformats-officedocument."
                             "spreadsheetml.sheet")
+
+    # ---- Start a new procurement cycle --------------------------------
+    st.markdown('<div class="card-heading" style="margin-top:16px;">'
+                '🔄 Start a new cycle</div>', unsafe_allow_html=True)
+    if st.session_state.get("cycle_reset_msg"):
+        st.success(st.session_state.pop("cycle_reset_msg"))
+    if not st.session_state.get("confirm_reset"):
+        st.markdown(
+            '<div class="opt-sub">Finished this batch (sourced, emailed, orders '
+            'saved)? This archives everything, then clears the Wishlist &amp; '
+            'Sourcing so you can start fresh.</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Start new cycle…", key="start_reset"):
+            st.session_state.confirm_reset = True
+            st.rerun()
+    else:
+        st.markdown(
+            '<div class="route-hint" style="border-color:#C94B4B;'
+            'background:#F7E0E0;color:#C94B4B;">This will <b>archive</b> the current '
+            'batch and then <b>clear</b> the Wishlist and all sourcing. Continue?</div>',
+            unsafe_allow_html=True,
+        )
+        rc1, rc2, _ = st.columns([1.5, 1, 3])
+        with rc1:
+            if st.button("Yes, archive & clear", key="do_reset", type="primary",
+                         use_container_width=True):
+                ts = reset_cycle()
+                st.session_state.confirm_reset = False
+                st.session_state.sourcing_idx = 0
+                st.session_state.cycle_reset_msg = (
+                    f"New cycle started — previous batch archived ({ts}).")
+                st.rerun()
+        with rc2:
+            if st.button("Cancel", key="cancel_reset", use_container_width=True):
+                st.session_state.confirm_reset = False
+                st.rerun()
 
 
 # ----------------------------------------------------------------------------
