@@ -65,6 +65,9 @@ OPT_COLUMNS = ["Component ID", "Supplier", "Supplier Type", "Price", "Stock",
 
 TRUSTED_SUPPLIERS = ["RS Components", "Communica", "Mantech", "Mintech", "Other"]
 
+# Default recipient for the "Email to Lecturer" buttons (editable in the app).
+LECTURER_EMAIL = "2433692@students.wits.ac.za"
+
 
 # ---- Backend selection -----------------------------------------------------
 def _secrets_file_exists() -> bool:
@@ -1480,10 +1483,7 @@ def render_sourcing() -> None:
         # Single sourcing-entry card (choose type; URL always available)
         with card():
             st.markdown(
-                '<div class="src-card-title">Add Supplier</div>'
-                '<div class="src-card-sub">Record where this component will be '
-                'bought. You check stock &amp; price on the vendor site yourself '
-                '— no price comparison is done here.</div>',
+                '<div class="src-card-title">Add Supplier</div>',
                 unsafe_allow_html=True,
             )
             s_type = st.radio(
@@ -1752,8 +1752,8 @@ def render_procurement():
     )
 
     # ---- Shopping Cart Queue -------------------------------------------
-    lect = st.text_input("Lecturer email", placeholder="lecturer@wits.ac.za",
-                         key="lect_email")
+    st.session_state.setdefault("lect_email", LECTURER_EMAIL)
+    lect = st.text_input("Lecturer email", key="lect_email")
     body = "Shopping cart for procurement:\n\n" + "\n".join(
         f'- {clean(c["Component"])} ({clean(c["Model"])}) x{_qty(c["Quantity"])} '
         f'from {sup} @ {_money(_price(ch["Price"]))}'
