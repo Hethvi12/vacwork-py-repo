@@ -63,7 +63,11 @@ WL_COLUMNS = ["#", "Component", "Model", "Specifications", "Quantity",
 OPT_COLUMNS = ["Component ID", "Supplier", "Supplier Type", "Price", "Stock",
                "ETA", "Shopping Cart Available", "URL", "Selected"]
 
-TRUSTED_SUPPLIERS = ["RS Components", "Communica", "Mantech", "Mintech", "Other"]
+SUPPLIERS = [
+    "RS Components", "Communica", "Mantech Electronics", "Micro Robotics",
+    "Netram Technologies", "DIY Electronics", "PiShop", "Electrocomp",
+    "Actum Electronics", "Mouser", "DigiKey", "Other",
+]
 
 # Default recipient for the "Email to Lecturer" buttons (editable in the app).
 LECTURER_EMAIL = "2433692@students.wits.ac.za"
@@ -1565,14 +1569,12 @@ def render_sourcing() -> None:
                 ["Trusted supplier", "Found via search"],
                 horizontal=True, key="s_type",
             )
-            if s_type == "Trusted supplier":
-                supplier = st.selectbox("Supplier", TRUSTED_SUPPLIERS,
-                                        key="s_supplier")
-                supplier_type = "Trusted"
-            else:
-                supplier = st.text_input("Vendor", placeholder="e.g. DigiKey",
-                                         key="s_vendor")
-                supplier_type = "External"
+            supplier_type = "Trusted" if s_type == "Trusted supplier" else "External"
+            supplier = st.selectbox("Supplier", SUPPLIERS, key="s_supplier")
+            if supplier == "Other":
+                supplier = st.text_input(
+                    "Supplier name", placeholder="Type the supplier / vendor name",
+                    key="s_other").strip()
 
             s_url = st.text_input("Product URL (optional)",
                                   placeholder="https://www.digikey.com/...",
