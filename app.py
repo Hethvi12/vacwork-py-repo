@@ -70,7 +70,7 @@ SUPPLIERS = [
 ]
 
 # Default recipient for the "Email to Lecturer" buttons (editable in the app).
-LECTURER_EMAIL = "2433692@students.wits.ac.za"
+LECTURER_EMAIL = "ling.cheng@wits.ac.za"
 
 
 # ---- Backend selection -----------------------------------------------------
