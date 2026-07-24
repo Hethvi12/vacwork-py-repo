@@ -1744,8 +1744,10 @@ def _group_by_company(items):
     by = {}
     for (comp, sup, chosen) in items:
         agg = by.setdefault(sup or "(no supplier)", {})
+        # Merge duplicates by component name + model (the orderable part
+        # identity); specification is descriptive and not used as the key.
         k = (clean(comp["Component"]).strip().lower(),
-             clean(comp["Specifications"]).strip().lower())
+             clean(comp["Model"]).strip().lower())
         if k not in agg:
             agg[k] = {"Component": clean(comp["Component"]),
                       "Model": clean(comp["Model"]),
