@@ -943,6 +943,16 @@ st.markdown(
             margin-bottom: 16px !important;
         }}
 
+        /* Blue guide banner (getting-started tour) */
+        [class*="st-key-guide_banner"] {{
+            background: {LIGHT_BLUE} !important;
+            border: 1px solid #C9D8EE !important;
+            border-radius: 16px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+            padding: 16px 20px !important;
+            margin-bottom: 16px !important;
+        }}
+
         /* Red "Delete" button — stable class (newer) OR .del-marker column
            (older). Both selectors listed so it works on any Streamlit version. */
         [class*="st-key-delcell"] button,
@@ -2233,7 +2243,7 @@ with st.sidebar:
             args=(name,),
         )
 
-    if st.button("❓  Guide", key="open_guide", use_container_width=True):
+    if st.button("Guide", key="open_guide", use_container_width=True):
         st.session_state.show_guide = True
         st.session_state.guide_step = 0
         st.rerun()
@@ -2289,49 +2299,67 @@ PAGE_CONTENT = {
     ),
 }
 
+# Each step also names the page the tour navigates to, so the user watches
+# the real page while the banner explains what to do on it.
 GUIDE_STEPS = [
-    ("Welcome 👋",
-     "This tool moves components from a <b>Wishlist</b> → <b>Sourcing</b> → "
-     "ready-to-place <b>Procurement Outputs</b>. Here is a quick tour of the "
-     "flow."),
-    ("Step 1 · Wishlist",
-     "Add the components you need. For example: <b>LM358 Op-Amp</b>, model "
-     "<b>LM358N</b>, spec <i>Dual op-amp, DIP-8</i>, quantity <b>50</b>. "
-     "You can add them one at a time, edit or delete a row, or paste a whole "
-     "list at once with “Add many at once”."),
-    ("Step 2 · Sourcing",
-     "For each component you record <b>where to buy it</b>. Choose a "
-     "<b>Trusted supplier</b> (e.g. RS Components) or one you <b>Found via "
+    ("Welcome 👋", "Dashboard",
+     "This short tour walks you through the app one page at a time. This is "
+     "the <b>Dashboard</b> — an overview of the current cycle. Click "
+     "<b>Next</b> to begin."),
+    ("Step 1 · Wishlist", "Wishlist",
+     "This is the <b>Wishlist</b>. Add the components you need using the form "
+     "below — for example <b>LM358 Op-Amp</b>, model <b>LM358N</b>, spec "
+     "<i>Dual op-amp, DIP-8</i>, quantity <b>50</b>. You can add them one at a "
+     "time, edit or delete a row, or paste a whole list with “Add many at "
+     "once”. Try it, then click <b>Next</b>."),
+    ("Step 2 · Sourcing", "Sourcing",
+     "This is <b>Sourcing</b>. For a component, record where to buy it: choose "
+     "a <b>Trusted supplier</b> (e.g. RS Components) or one you <b>Found via "
      "search</b>, paste the product <b>URL</b>, and enter the stock, unit "
-     "price and ETA. Toggle whether it has an <b>online cart</b>, then "
+     "price and ETA. Mark whether it has an <b>online cart</b>, then "
      "<b>Select</b> the option and press <b>Confirm Source</b>."),
-    ("Step 3 · Procurement Outputs",
-     "Confirmed components are grouped by supplier. Items with an online cart "
-     "go to the <b>Shopping Cart Queue</b> (buy online or e-mail the "
-     "lecturer); the rest form a <b>Manual Order List</b>. You can "
-     "<b>export to Excel</b> (one sheet per company) or save the order sheets, "
-     "then <b>Start a new cycle</b> when the batch is done."),
-    ("You're all set ✅",
-     "That's the whole flow: Wishlist → Sourcing → Procurement "
-     "Outputs. Reopen this guide anytime from <b>❓ Guide</b> in the "
-     "sidebar."),
+    ("Step 3 · Procurement Outputs", "Procurement Outputs",
+     "This is <b>Procurement Outputs</b>. Confirmed items are grouped by "
+     "supplier — cart items in the <b>Shopping Cart Queue</b>, the rest in the "
+     "<b>Manual Order List</b>. From here you can <b>export to Excel</b> or "
+     "e-mail the lecturer, then <b>Start a new cycle</b> when the batch is "
+     "done."),
+    ("You're all set ✅", "Dashboard",
+     "That's the whole flow: Wishlist → Sourcing → Procurement Outputs. "
+     "Reopen this tour anytime from <b>Guide</b> in the sidebar."),
 ]
 
 
-def render_guide():
+def _render_page(page):
+    if page == "Wishlist":
+        render_wishlist()
+    elif page == "Sourcing":
+        render_sourcing()
+    elif page == "Procurement Outputs":
+        render_procurement()
+    else:
+        render_dashboard()
+
+
+def render_guide_banner():
     n = len(GUIDE_STEPS)
     step = max(0, min(st.session_state.get("guide_step", 0), n - 1))
-    title, body = GUIDE_STEPS[step]
-    with card():
+    title, gpage, body = GUIDE_STEPS[step]
+    st.session_state.active_page = gpage   # navigate to the real page
+    try:
+        banner = st.container(key="guide_banner")
+    except TypeError:
+        banner = st.container()
+    with banner:
         st.markdown(
-            f'<div class="opt-count">Step {step + 1} of {n}</div>'
-            f'<div style="font-size:22px;font-weight:700;color:{TEXT};'
-            f'margin:4px 0 10px 0;">{title}</div>'
-            f'<div style="font-size:15px;color:{MUTED_TEXT};line-height:1.6;">'
+            f'<div class="opt-count">Guided tour · Step {step + 1} of {n}</div>'
+            f'<div style="font-size:18px;font-weight:700;color:{TEXT};'
+            f'margin:2px 0 8px 0;">{title}</div>'
+            f'<div style="font-size:14px;color:{MUTED_TEXT};line-height:1.6;">'
             f'{body}</div>',
             unsafe_allow_html=True,
         )
-        b1, b2, b3 = st.columns(3)
+        b1, b2, b3, _ = st.columns([1, 1, 1, 2])
         with b1:
             if st.button("← Back", key="guide_back",
                          use_container_width=True, disabled=step == 0):
@@ -2351,17 +2379,11 @@ def render_guide():
             if st.button("Skip", key="guide_skip", use_container_width=True):
                 st.session_state.show_guide = False
                 st.rerun()
+    return gpage
 
 
 if st.session_state.get("show_guide"):
-    render_guide()
+    current_page = render_guide_banner()   # banner on top …
+    _render_page(current_page)             # … over the real page beneath
 else:
-    page = st.session_state.active_page
-    if page == "Wishlist":
-        render_wishlist()
-    elif page == "Sourcing":
-        render_sourcing()
-    elif page == "Procurement Outputs":
-        render_procurement()
-    else:
-        render_dashboard()
+    _render_page(st.session_state.active_page)
