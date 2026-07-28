@@ -2233,6 +2233,11 @@ with st.sidebar:
             args=(name,),
         )
 
+    if st.button("❓  Guide", key="open_guide", use_container_width=True):
+        st.session_state.show_guide = True
+        st.session_state.guide_step = 0
+        st.rerun()
+
     st.markdown(
         """
         <div class="admin-card">
@@ -2284,12 +2289,79 @@ PAGE_CONTENT = {
     ),
 }
 
-page = st.session_state.active_page
-if page == "Wishlist":
-    render_wishlist()
-elif page == "Sourcing":
-    render_sourcing()
-elif page == "Procurement Outputs":
-    render_procurement()
+GUIDE_STEPS = [
+    ("Welcome 👋",
+     "This tool moves components from a <b>Wishlist</b> → <b>Sourcing</b> → "
+     "ready-to-place <b>Procurement Outputs</b>. Here is a quick tour of the "
+     "flow."),
+    ("Step 1 · Wishlist",
+     "Add the components you need. For example: <b>LM358 Op-Amp</b>, model "
+     "<b>LM358N</b>, spec <i>Dual op-amp, DIP-8</i>, quantity <b>50</b>. "
+     "You can add them one at a time, edit or delete a row, or paste a whole "
+     "list at once with “Add many at once”."),
+    ("Step 2 · Sourcing",
+     "For each component you record <b>where to buy it</b>. Choose a "
+     "<b>Trusted supplier</b> (e.g. RS Components) or one you <b>Found via "
+     "search</b>, paste the product <b>URL</b>, and enter the stock, unit "
+     "price and ETA. Toggle whether it has an <b>online cart</b>, then "
+     "<b>Select</b> the option and press <b>Confirm Source</b>."),
+    ("Step 3 · Procurement Outputs",
+     "Confirmed components are grouped by supplier. Items with an online cart "
+     "go to the <b>Shopping Cart Queue</b> (buy online or e-mail the "
+     "lecturer); the rest form a <b>Manual Order List</b>. You can "
+     "<b>export to Excel</b> (one sheet per company) or save the order sheets, "
+     "then <b>Start a new cycle</b> when the batch is done."),
+    ("You're all set ✅",
+     "That's the whole flow: Wishlist → Sourcing → Procurement "
+     "Outputs. Reopen this guide anytime from <b>❓ Guide</b> in the "
+     "sidebar."),
+]
+
+
+def render_guide():
+    n = len(GUIDE_STEPS)
+    step = max(0, min(st.session_state.get("guide_step", 0), n - 1))
+    title, body = GUIDE_STEPS[step]
+    with card():
+        st.markdown(
+            f'<div class="opt-count">Step {step + 1} of {n}</div>'
+            f'<div style="font-size:22px;font-weight:700;color:{TEXT};'
+            f'margin:4px 0 10px 0;">{title}</div>'
+            f'<div style="font-size:15px;color:{MUTED_TEXT};line-height:1.6;">'
+            f'{body}</div>',
+            unsafe_allow_html=True,
+        )
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            if st.button("← Back", key="guide_back",
+                         use_container_width=True, disabled=step == 0):
+                st.session_state.guide_step = step - 1
+                st.rerun()
+        with b2:
+            if step < n - 1:
+                if st.button("Next →", key="guide_next", type="primary",
+                             use_container_width=True):
+                    st.session_state.guide_step = step + 1
+                    st.rerun()
+            elif st.button("Finish", key="guide_finish", type="primary",
+                           use_container_width=True):
+                st.session_state.show_guide = False
+                st.rerun()
+        with b3:
+            if st.button("Skip", key="guide_skip", use_container_width=True):
+                st.session_state.show_guide = False
+                st.rerun()
+
+
+if st.session_state.get("show_guide"):
+    render_guide()
 else:
-    render_dashboard()
+    page = st.session_state.active_page
+    if page == "Wishlist":
+        render_wishlist()
+    elif page == "Sourcing":
+        render_sourcing()
+    elif page == "Procurement Outputs":
+        render_procurement()
+    else:
+        render_dashboard()
